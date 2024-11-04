@@ -1,43 +1,41 @@
-﻿import express from "express";
+﻿// src/app.ts
+import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import dotenv from "dotenv";
-import mongoose from "mongoose";
-import { createClient } from "redis";
+import { errorHandler } from "./middleware/errorHandler";
+import { emailRoutes } from "./routes/emailRoutes";
+import { templateRoutes } from "./routes/templateRoutes";
+import { setupDatabase } from "./config/database";
+import { Logger } from "./utils/Logger";
 
-// Load environment variables
 dotenv.config();
 
 const app = express();
+const logger = new Logger();
+const port = process.env.PORT ?? 3000;
 
 // Middleware
-app.use(cors());
 app.use(helmet());
+app.use(cors());
 app.use(express.json());
 
-// MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI!)
-  .then(() => console.log("Connected to MongoDB"))
-  .catch((err) => console.error("MongoDB connection error:", err));
+// Routes
+app.use("/api/v1/email", emailRoutes);
+app.use("/api/v1/templates", templateRoutes);
 
-// Redis Connection
-const redisClient = createClient({
-  url: process.env.REDIS_URL
+// Error handling
+app.use(errorHandler);
+
+// Database setup
+setupDatabase().catch((error) => {
+  logger.error("Failed to connect to database", { error });
+  process.exit(1);
 });
 
-redisClient.connect()
-  .then(() => console.log("Connected to Redis"))
-  .catch((err) => console.error("Redis connection error:", err));
-
-// Basic error handling
-app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error(err.stack);
-  res.status(500).send("Something broke!");
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+// Start server
+app.listen(port, () => {
+  logger.info(`Server running on port ${port}`);
 });
 
 export default app;
