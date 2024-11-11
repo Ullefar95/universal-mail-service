@@ -1,34 +1,39 @@
-﻿import express from "express";
+﻿import dotenv from "dotenv";
+dotenv.config();
+console.log(process.env);
+
+import express from "express";
 import cors from "cors";
 import path from "path";
 import { emailRoutes } from "./routes/emailRoutes";
 import { templateRoutes } from "./routes/templateRoutes";
+import authRoutes from "./routes/authRoutes";
 import { errorHandler } from "./middleware/errorHandler";
 import { setupDatabase } from "./config/database";
-import { rateLimitMiddleware, authMiddleware } from "./security/auth"; // Samlet import for at undgå duplikerede imports
-import { Logger } from "./utils/Logger"; // Korrekt import af Logger-klassen
+import { Logger } from "./utils/Logger";
 
 const app = express();
-const PORT = process.env.PORT ?? 3000;
-const logger = new Logger(); // Instansér loggeren
+const PORT = process.env.PORT;
+const logger = new Logger();
 
 // Middleware
-app.use(cors());
+app.use(
+  cors({
+    origin: "http://localhost:3000",
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true,
+  })
+);
 app.use(express.json());
-app.use(rateLimitMiddleware); // Rate limiting middleware
-
-// Authentication middleware for secure routes
-app.use(authMiddleware);
 
 // API Routes
 app.use("/api/v1/emails", emailRoutes);
 app.use("/api/v1/templates", templateRoutes);
+app.use("/api/v1/auth", authRoutes); // Tilføjet auth-ruter
 
 // Serve static files from the React build directory
 if (process.env.NODE_ENV === "production") {
   app.use(express.static(path.join(__dirname, "../public")));
-
-  // Handle React routing, return all requests to React app
   app.get("*", (req, res) => {
     if (!req.path.startsWith("/api")) {
       res.sendFile(path.join(__dirname, "../public", "index.html"));
@@ -53,5 +58,4 @@ const startServer = async () => {
 };
 
 startServer();
-
 export default app;

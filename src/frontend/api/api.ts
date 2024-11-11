@@ -1,6 +1,7 @@
 ﻿import axios from "axios";
 import { EmailTemplate, EmailData, EmailStatus } from "../types/api";
 
+// Angiv den korrekte base-URL til API'et
 const API_BASE_URL =
   process.env.REACT_APP_API_URL ?? "http://localhost:3000/api/v1";
 
@@ -21,7 +22,7 @@ api.interceptors.request.use(
     }
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => Promise.reject(new Error(error.message || error))
 );
 
 // Tilføj response interceptor til error handling
@@ -29,11 +30,10 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Håndter uautoriseret adgang
       localStorage.removeItem("token");
       window.location.href = "/login";
     }
-    return Promise.reject(error);
+    return Promise.reject(new Error(error.message || error));
   }
 );
 
@@ -53,4 +53,12 @@ export const emailApi = {
   send: (data: EmailData) => api.post<{ id: string }>("/emails/send", data),
   getStatus: (id: string) => api.get<EmailStatus>(`/emails/status/${id}`),
   getHistory: () => api.get<EmailStatus[]>("/emails/history"),
+};
+
+// API-service til autentificering og API keys
+export const authApi = {
+  generateToken: () => api.post<{ token: string }>("/auth/token"),
+  getApiKeys: () => api.get<string[]>("/auth/api-keys"),
+  createApiKey: () => api.post<{ apiKey: string }>("/auth/api-keys"),
+  revokeApiKey: (apiKey: string) => api.delete(`/auth/api-keys/${apiKey}`),
 };
