@@ -1,7 +1,7 @@
 ﻿import axios from "axios";
 import { EmailTemplate, EmailData, EmailStatus } from "../types/api";
 
-// Angiv den korrekte base-URL til API'et
+// Define the base URL for the API
 const API_BASE_URL =
   process.env.REACT_APP_API_URL ?? "http://localhost:3000/api/v1";
 
@@ -13,7 +13,7 @@ export const api = axios.create({
   },
 });
 
-// Tilføj request interceptor til autentificering
+// Add request interceptor for authorization
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("token");
@@ -25,19 +25,27 @@ api.interceptors.request.use(
   (error) => Promise.reject(new Error(error.message || error))
 );
 
-// Tilføj response interceptor til error handling
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem("token");
-      window.location.href = "/login";
+// Add response interceptor for error handling
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
-    return Promise.reject(new Error(error.message || error));
-  }
+    return config;
+  },
+  (error) => Promise.reject(new Error(error.message || error))
 );
 
-// API-service til templates
+// API service types for Auth responses
+interface ApiKey {
+  id: string;
+  token: string;
+  name: string;
+  scopes: string[];
+}
+
+// Template API service
 export const templateApi = {
   getAll: () => api.get<EmailTemplate[]>("/templates"),
   getById: (id: string) => api.get<EmailTemplate>(`/templates/${id}`),
@@ -48,17 +56,32 @@ export const templateApi = {
   delete: (id: string) => api.delete(`/templates/${id}`),
 };
 
-// API-service til emails
+// Email API service
 export const emailApi = {
   send: (data: EmailData) => api.post<{ id: string }>("/emails/send", data),
   getStatus: (id: string) => api.get<EmailStatus>(`/emails/status/${id}`),
   getHistory: () => api.get<EmailStatus[]>("/emails/history"),
 };
 
-// API-service til autentificering og API keys
+// Auth API service for managing tokens and API keys
 export const authApi = {
+  // Generate a new authentication token for the current user
   generateToken: () => api.post<{ token: string }>("/auth/token"),
-  getApiKeys: () => api.get<string[]>("/auth/api-keys"),
-  createApiKey: () => api.post<{ apiKey: string }>("/auth/api-keys"),
+
+  // Retrieve all API keys associated with the authenticated user
+  getApiKeys: () => api.get<ApiKey[]>("/auth/api-keys"), // Updated type to ApiKey[]
+
+  // Create a new API key with an optional name and permissions
+  createApiKey: (name: string, scopes: string[] = ["read"]) =>
+    api.post<{ apiKey: string }>("/auth/api-keys", { name, scopes }),
+
+  // Revoke a specific API key by its key identifier
   revokeApiKey: (apiKey: string) => api.delete(`/auth/api-keys/${apiKey}`),
+
+  // Retrieve all tokens associated with the authenticated user
+  getTokens: () =>
+    api.get<{ id: string; token: string; name: string }[]>("/auth/tokens"),
+
+  // Delete a specific token by its identifier
+  deleteToken: (tokenId: string) => api.delete(`/auth/token/${tokenId}`),
 };

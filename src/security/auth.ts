@@ -15,7 +15,7 @@ redisClient
   .connect()
   .catch((err) => console.error("Redis connection error:", err));
 
-// Udvidelse af Express.Request for at inkludere 'user' feltet
+// Extend Express.Request to include 'user' property
 declare global {
   namespace Express {
     interface Request {
@@ -27,11 +27,12 @@ declare global {
   }
 }
 
-// API Key Management-klassen
+// API Key Management Class
 export class ApiKeyManager {
   private static readonly KEY_PREFIX = "ak_";
+  private static readonly TOKEN_PREFIX = "token_";
   private static readonly KEY_LENGTH = 32;
-  private static readonly KEY_EXPIRY = 365 * 24 * 60 * 60; // 1 år
+  private static readonly KEY_EXPIRY = 365 * 24 * 60 * 60; // 1 year
 
   static generateApiKey(): string {
     const randomBytes = crypto.randomBytes(this.KEY_LENGTH);
@@ -71,7 +72,7 @@ export class ApiKeyManager {
     return result === 1;
   }
 
-  // Hent alle API nøgler
+  // Get all API keys
   static async getAllApiKeys(): Promise<{ apiKey: string; details: any }[]> {
     const keys = await redisClient.keys("apikey:*");
     const apiKeys = await Promise.all(
@@ -79,26 +80,49 @@ export class ApiKeyManager {
         const details = await redisClient.get(key);
         return {
           apiKey: key.replace("apikey:", ""),
-          details: JSON.parse(details ?? "{}"), // Brug nullish coalescing
+          details: JSON.parse(details ?? "{}"), // Use nullish coalescing
         };
       })
     );
     return apiKeys;
   }
+
+  // Get all tokens associated with the user
+  static async getAllTokens(): Promise<
+    { token: string; userId: string; createdAt: string }[]
+  > {
+    const keys = await redisClient.keys(`${this.TOKEN_PREFIX}*`);
+    const tokens = await Promise.all(
+      keys.map(async (key) => {
+        const details = await redisClient.get(key);
+        return {
+          token: key.replace(this.TOKEN_PREFIX, ""),
+          ...(details ? JSON.parse(details) : {}),
+        };
+      })
+    );
+    return tokens;
+  }
+
+  // Delete a specific token by its identifier
+  static async deleteToken(tokenId: string): Promise<boolean> {
+    const result = await redisClient.del(`${this.TOKEN_PREFIX}${tokenId}`);
+    return result === 1;
+  }
 }
 
 // Rate Limiting Middleware
 export const rateLimitMiddleware = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutter
-  max: 100, // Begræns til 100 anmodninger pr. vindue
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit to 100 requests per window
   message: {
     status: "error",
     code: "RATE_LIMIT_EXCEEDED",
-    message: "For mange forespørgsler. Prøv igen senere.",
+    message: "Too many requests. Please try again later.",
   },
 });
 
-// Autentificeringsmiddleware
+// Authentication Middleware
 export const authMiddleware = async (
   req: Request,
   res: Response,
