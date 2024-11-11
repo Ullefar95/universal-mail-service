@@ -1,6 +1,9 @@
-// src/config/database.ts
 import mongoose from "mongoose";
 import { Logger } from "../utils/Logger";
+import dotenv from "dotenv";
+import { MongoError } from "mongodb";
+
+dotenv.config();
 
 const logger = new Logger();
 
@@ -16,7 +19,7 @@ export async function setupDatabase(): Promise<void> {
 
     logger.info("Connected to MongoDB");
 
-    mongoose.connection.on("error", (error) => {
+    mongoose.connection.on("error", (error: MongoError) => {
       logger.error("MongoDB connection error", { error });
     });
 
@@ -28,8 +31,10 @@ export async function setupDatabase(): Promise<void> {
       await mongoose.connection.close();
       process.exit(0);
     });
-  } catch (error) {
-    logger.error("Failed to connect to MongoDB", { error });
+  } catch (error: unknown) {
+    logger.error("Failed to connect to MongoDB", {
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
     throw error;
   }
 }

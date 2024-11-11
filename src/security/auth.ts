@@ -4,26 +4,53 @@ import OAuth2Server from "@node-oauth/oauth2-server";
 import crypto from "crypto";
 import rateLimit from "express-rate-limit";
 import { createClient } from "redis";
-import Joi from "joi";
 import { Logger } from "../utils/Logger";
 
 const logger = new Logger();
 
 // Redis client setup with error handling
+// Redis client setup with retry on failure
 const redisClient = createClient({
   url: process.env.REDIS_URL,
+  socket: {
+    reconnectStrategy: (retries) => {
+      console.log(`Redis connection attempt ${retries}`);
+      return Math.min(retries * 100, 3000); // Retrying after exponential backoff, max 3 seconds
+    },
+  },
 });
 
 redisClient.on("error", (err) => logger.error("Redis Client Error", err));
+redisClient.on("connect", () => logger.info("Connected to Redis server"));
+
+// Function to connect Redis
+const connectRedis = async () => {
+  if (!redisClient.isOpen) {
+    await redisClient.connect();
+    logger.info("Connected to Redis");
+  }
+};
+
+// Ensure Redis connection
+const ensureRedisConnected = async () => {
+  if (!redisClient.isOpen) {
+    await connectRedis();
+  }
+};
+
+// Call connectRedis at startup to connect initially
+connectRedis();
 
 // OAuth2 Server Setup
 const oauth = new OAuth2Server({
   model: {
     getAccessToken: async (accessToken: string) => {
+      await ensureRedisConnected();
       const token = await redisClient.get(`oauth:token:${accessToken}`);
       return token ? JSON.parse(token) : null;
     },
     getClient: async (clientId: string, clientSecret: string) => {
+      await ensureRedisConnected();
       const client = await redisClient.get(`oauth:client:${clientId}`);
       if (!client) return null;
 
@@ -31,11 +58,8 @@ const oauth = new OAuth2Server({
       return clientSecret === clientData.secret ? clientData : null;
     },
     saveToken: async (token: any, client: any, user: any) => {
-      const accessToken = {
-        ...token,
-        client,
-        user,
-      };
+      await ensureRedisConnected();
+      const accessToken = { ...token, client, user };
 
       await redisClient.set(
         `oauth:token:${token.accessToken}`,
@@ -46,10 +70,12 @@ const oauth = new OAuth2Server({
       return accessToken;
     },
     getRefreshToken: async (refreshToken: string) => {
+      await ensureRedisConnected();
       const token = await redisClient.get(`oauth:refresh:${refreshToken}`);
       return token ? JSON.parse(token) : null;
     },
     revokeToken: async (token: any) => {
+      await ensureRedisConnected();
       const result = await redisClient.del(`oauth:token:${token.accessToken}`);
       return result === 1;
     },
@@ -80,6 +106,7 @@ export class ApiKeyManager {
     userId: string,
     scopes: string[] = []
   ): Promise<void> {
+    await ensureRedisConnected();
     const keyData = {
       userId,
       scopes,
@@ -98,6 +125,7 @@ export class ApiKeyManager {
       return false;
     }
 
+    await ensureRedisConnected();
     const exists = await redisClient.exists(`apikey:${apiKey}`);
     return exists === 1;
   }
@@ -107,11 +135,13 @@ export class ApiKeyManager {
     scopes: string[];
     createdAt: string;
   } | null> {
+    await ensureRedisConnected();
     const data = await redisClient.get(`apikey:${apiKey}`);
     return data ? JSON.parse(data) : null;
   }
 
   static async revokeApiKey(apiKey: string): Promise<boolean> {
+    await ensureRedisConnected();
     const result = await redisClient.del(`apikey:${apiKey}`);
     return result === 1;
   }
@@ -128,35 +158,22 @@ export const authMiddleware = async (
 
   try {
     if (apiKey) {
-      // API Key Authentication
       const isValid = await ApiKeyManager.validateApiKey(apiKey);
-      if (!isValid) {
-        throw new Error("Invalid API key");
-      }
+      if (!isValid) throw new Error("Invalid API key");
 
       const keyDetails = await ApiKeyManager.getKeyDetails(apiKey);
-      if (!keyDetails) {
-        throw new Error("API key details not found");
-      }
+      if (!keyDetails) throw new Error("API key details not found");
 
-      req.user = {
-        id: keyDetails.userId,
-        scopes: keyDetails.scopes,
-      };
+      req.user = { id: keyDetails.userId, scopes: keyDetails.scopes };
     } else if (authHeader?.startsWith("Bearer ")) {
-      // OAuth2 Authentication
       const request = new OAuth2Server.Request(req);
       const response = new OAuth2Server.Response(res);
 
       const token = await oauth.authenticate(request, response);
-      req.user = {
-        id: token.user.id,
-        scopes: token.scope || [],
-      };
+      req.user = { id: token.user.id, scopes: token.scope || [] };
     } else {
       throw new Error("No valid authentication provided");
     }
-
     next();
   } catch (error) {
     logger.error("Authentication failed", { error });
@@ -171,19 +188,26 @@ export const authMiddleware = async (
 // Enhanced Rate Limiting with Redis
 const RedisStore = {
   incr: async (key: string): Promise<number> => {
+    await ensureRedisConnected();
     const multi = redisClient.multi();
     multi.incr(key);
     multi.expire(key, 900); // 15 minutes
     const results = await multi.exec();
     return results ? (results[0] as number) : 0;
   },
-  decrement: (key: string): Promise<number> => redisClient.decr(key),
-  resetKey: (key: string): Promise<number> => redisClient.del(key),
+  decrement: async (key: string): Promise<number> => {
+    await ensureRedisConnected();
+    return redisClient.decr(key);
+  },
+  resetKey: async (key: string): Promise<number> => {
+    await ensureRedisConnected();
+    return redisClient.del(key);
+  },
 };
 
 export const rateLimitMiddleware = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 100,
   message: {
     status: "error",
     code: "RATE_LIMIT_EXCEEDED",
@@ -193,127 +217,12 @@ export const rateLimitMiddleware = rateLimit({
   legacyHeaders: false,
   store: RedisStore,
   skip: (req) => {
-    // Skip rate limiting for whitelisted IPs or internal requests
     const whitelist = (process.env.RATE_LIMIT_WHITELIST ?? "").split(",");
     return whitelist.includes(req.ip ?? "");
   },
 });
 
-// Improved Validation Schemas
-export const validationSchemas = {
-  email: Joi.object({
-    to: Joi.array().items(Joi.string().email()).required().max(50),
-    cc: Joi.array().items(Joi.string().email()).max(50),
-    bcc: Joi.array().items(Joi.string().email()).max(50),
-    subject: Joi.string().required().max(998).trim(), // RFC 2822 limit
-    body: Joi.object({
-      html: Joi.string().max(10485760), // 10MB limit
-      text: Joi.string().max(10485760),
-    }).or("html", "text"),
-    templateId: Joi.string().uuid(),
-    variables: Joi.object().max(50),
-    attachments: Joi.array()
-      .items(
-        Joi.object({
-          filename: Joi.string().required().max(255),
-          content: Joi.string().base64().required().max(26214400), // 25MB limit
-          contentType: Joi.string().required().max(255),
-        })
-      )
-      .max(10), // Maximum 10 attachments
-    priority: Joi.string().valid("high", "normal", "low"),
-    scheduledTime: Joi.date().min("now"),
-  }).required(),
-};
-
-// Enhanced Request Validation
-export const validateRequest = (schema: Joi.ObjectSchema) => {
-  return async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const validated = await schema.validateAsync(req.body, {
-        abortEarly: false,
-        stripUnknown: true,
-        convert: true,
-      });
-
-      req.body = validated; // Replace with validated data
-      next();
-    } catch (error) {
-      if (error instanceof Joi.ValidationError) {
-        logger.warn("Validation failed", { error: error.details });
-        res.status(400).json({
-          error: "Validation failed",
-          code: "VALIDATION_ERROR",
-          details: error.details.map((detail) => ({
-            field: detail.path.join("."),
-            message: detail.message,
-          })),
-        });
-      } else {
-        next(error);
-      }
-    }
-  };
-};
-
-// Improved Error Handler
-export const errorHandler = (
-  err: unknown,
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  logger.error("Error occurred", { error: err });
-
-  if (err instanceof Error) {
-    const error = err as Error & {
-      code?: number;
-      details?: unknown[];
-      statusCode?: number;
-    };
-
-    // Handle different types of errors
-    if (error.name === "ValidationError") {
-      return res.status(400).json({
-        error: "Validation Error",
-        code: "VALIDATION_ERROR",
-        details: error.details,
-      });
-    }
-
-    if (
-      error.name === "UnauthorizedError" ||
-      error.name === "JsonWebTokenError" ||
-      error.name === "TokenExpiredError"
-    ) {
-      return res.status(401).json({
-        error: error.name,
-        code: "AUTH_ERROR",
-        message: error.message,
-      });
-    }
-
-    const statusCode = error.statusCode ?? error.code ?? 500;
-    return res.status(statusCode).json({
-      error: error.name,
-      code: error.code ?? "INTERNAL_ERROR",
-      message: error.message,
-      ...(process.env.NODE_ENV !== "production" && { stack: error.stack }),
-    });
-  }
-
-  // Default error response
-  res.status(500).json({
-    error: "Internal Server Error",
-    code: "INTERNAL_ERROR",
-    message:
-      process.env.NODE_ENV === "production"
-        ? "An unexpected error occurred"
-        : String(err),
-  });
-};
-
-// Extended Express Request type
+// Extend Express Request type for TypeScript to include 'user'
 declare global {
   namespace Express {
     interface Request {
