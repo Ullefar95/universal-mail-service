@@ -25,18 +25,6 @@ api.interceptors.request.use(
   (error) => Promise.reject(new Error(error.message || error))
 );
 
-// Add response interceptor for error handling
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(new Error(error.message || error))
-);
-
 // API service types for Auth responses
 interface ApiKey {
   id: string;
@@ -69,7 +57,7 @@ export const authApi = {
   generateToken: () => api.post<{ token: string }>("/auth/token"),
 
   // Retrieve all API keys associated with the authenticated user
-  getApiKeys: () => api.get<ApiKey[]>("/auth/api-keys"), // Updated type to ApiKey[]
+  getApiKeys: () => api.get<ApiKey[]>("/auth/api-keys"),
 
   // Create a new API key with an optional name and permissions
   createApiKey: (name: string, scopes: string[] = ["read"]) =>

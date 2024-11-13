@@ -1,5 +1,4 @@
-﻿// src/frontend/pages/TemplatesPage.tsx
-import React from "react";
+﻿import React, { useEffect, useState } from "react";
 import {
   Card,
   CardHeader,
@@ -9,41 +8,113 @@ import {
 import { Button } from "../components/common/Button";
 import { LoadingSpinner } from "../components/ui/loading-spinner";
 import { templateApi } from "../api/api";
+import { EmailTemplate } from "../types/api";
 import "../styles/globals.css";
 
 export const TemplatesPage: React.FC = () => {
-  const [loading, setLoading] = React.useState(true);
-  const [templates, setTemplates] = React.useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [templates, setTemplates] = useState<EmailTemplate[]>([]); // Explicitly using EmailTemplate type
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
-  React.useEffect(() => {
-    const fetchTemplates = async () => {
-      try {
-        const response = await templateApi.getAll();
-        console.log("API response:", response); // Tjek strukturen af response
-        setTemplates(Array.isArray(response.data) ? response.data : []);
-      } catch (error) {
-        console.error("Failed to fetch templates:", error);
-        setTemplates([]); // Sætter til en tom array ved fejl
-      } finally {
-        setLoading(false);
-      }
-    };
+  // Setting initial state for newTemplate to match EmailTemplate type
+  const [newTemplate, setNewTemplate] = useState<{
+    name: string;
+    subject: string;
+    body: { html: string; text?: string };
+  }>({
+    name: "",
+    subject: "",
+    body: { html: "", text: "" },
+  });
 
+  const fetchTemplates = async () => {
+    setLoading(true);
+    try {
+      const response = await templateApi.getAll();
+      setTemplates(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error("Failed to fetch templates:", error);
+      setTemplates([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createTemplate = async () => {
+    try {
+      await templateApi.create(newTemplate); // Passes newTemplate matching the EmailTemplate type
+      fetchTemplates();
+      setShowCreateModal(false);
+    } catch (error) {
+      console.error("Failed to create template:", error);
+    }
+  };
+
+  const deleteTemplate = async (id: string) => {
+    try {
+      await templateApi.delete(id);
+      fetchTemplates();
+    } catch (error) {
+      console.error("Failed to delete template:", error);
+    }
+  };
+
+  useEffect(() => {
     fetchTemplates();
   }, []);
 
-  if (loading) {
-    return <LoadingSpinner className="w-8 h-8" />;
-  }
+  if (loading) return <LoadingSpinner className="w-8 h-8" />;
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Email Templates</h1>
-        <Button variant="primary">Create Template</Button>
+        <Button variant="primary" onClick={() => setShowCreateModal(true)}>
+          Create Template
+        </Button>
       </div>
+      {showCreateModal && (
+        <div>
+          <input
+            value={newTemplate.name}
+            onChange={(e) =>
+              setNewTemplate({ ...newTemplate, name: e.target.value })
+            }
+            placeholder="Template Name"
+          />
+          <input
+            value={newTemplate.subject}
+            onChange={(e) =>
+              setNewTemplate({ ...newTemplate, subject: e.target.value })
+            }
+            placeholder="Template Subject"
+          />
+          <textarea
+            value={newTemplate.body.html} // Assigns `html` content to `body.html`
+            onChange={(e) =>
+              setNewTemplate({
+                ...newTemplate,
+                body: { ...newTemplate.body, html: e.target.value },
+              })
+            }
+            placeholder="HTML Content"
+          />
+          <textarea
+            value={newTemplate.body.text ?? ""}
+            onChange={(e) =>
+              setNewTemplate({
+                ...newTemplate,
+                body: { ...newTemplate.body, text: e.target.value },
+              })
+            }
+            placeholder="Text Content (optional)"
+          />
+          <Button onClick={createTemplate}>Save</Button>
+          <Button onClick={() => setShowCreateModal(false)}>Cancel</Button>
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {Array.isArray(templates) && templates.length > 0 ? (
+        {templates.length > 0 ? (
           templates.map((template) => (
             <Card key={template.id}>
               <CardHeader>
@@ -51,6 +122,9 @@ export const TemplatesPage: React.FC = () => {
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-gray-500">{template.subject}</p>
+                <Button onClick={() => deleteTemplate(template.id)}>
+                  Delete
+                </Button>
               </CardContent>
             </Card>
           ))

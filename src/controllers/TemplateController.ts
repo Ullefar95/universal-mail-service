@@ -1,4 +1,3 @@
-// src/controllers/TemplateController.ts
 import { Request, Response, NextFunction } from "express";
 import { Template, ITemplate } from "../models/Templates";
 import { TemplateError } from "../errors/AppError";
@@ -11,6 +10,7 @@ export class TemplateController {
     this.logger = new Logger();
   }
 
+  // Retrieve active templates
   getTemplates = async (
     req: Request,
     res: Response,
@@ -18,20 +18,19 @@ export class TemplateController {
   ): Promise<void> => {
     try {
       const templates = await Template.find({ isActive: true })
-        .select("-content")
+        .select("-content") // Exclude content in list view
         .sort({ updatedAt: -1 });
 
       res.status(200).json({
         status: "success",
-        data: {
-          templates,
-        },
+        data: { templates },
       });
     } catch (error) {
       next(error);
     }
   };
 
+  // Retrieve a specific template by ID
   getTemplate = async (
     req: Request,
     res: Response,
@@ -47,15 +46,14 @@ export class TemplateController {
 
       res.status(200).json({
         status: "success",
-        data: {
-          template,
-        },
+        data: { template },
       });
     } catch (error) {
       next(error);
     }
   };
 
+  // Create a new template
   createTemplate = async (
     req: Request,
     res: Response,
@@ -64,7 +62,7 @@ export class TemplateController {
     try {
       const templateData: Partial<ITemplate> = req.body;
 
-      // Check if template with same name exists
+      // Check for duplicate template by name
       const existingTemplate = await Template.findOne({
         name: templateData.name,
       });
@@ -81,15 +79,14 @@ export class TemplateController {
 
       res.status(201).json({
         status: "success",
-        data: {
-          template,
-        },
+        data: { template },
       });
     } catch (error) {
       next(error);
     }
   };
 
+  // Update an existing template
   updateTemplate = async (
     req: Request,
     res: Response,
@@ -105,7 +102,7 @@ export class TemplateController {
         throw new TemplateError("Template not found", "NOT_FOUND");
       }
 
-      // If content is being updated, increment version
+      // Increment version if content is being updated
       if (updateData.content && updateData.content !== template.content) {
         updateData.version = template.version + 1;
       }
@@ -119,15 +116,14 @@ export class TemplateController {
 
       res.status(200).json({
         status: "success",
-        data: {
-          template: updatedTemplate,
-        },
+        data: { template: updatedTemplate },
       });
     } catch (error) {
       next(error);
     }
   };
 
+  // Soft delete a template by setting isActive to false
   deleteTemplate = async (
     req: Request,
     res: Response,
@@ -136,7 +132,6 @@ export class TemplateController {
     try {
       const { id } = req.params;
 
-      // Soft delete by setting isActive to false
       const template = await Template.findByIdAndUpdate(
         id,
         { isActive: false },

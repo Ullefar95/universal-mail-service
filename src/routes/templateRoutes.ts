@@ -16,4 +16,4 @@ router.put("/:id", validateTemplateRequest, templateController.updateTemplate);
 
 router.delete("/:id", templateController.deleteTemplate);
 
-export const templateRoutes = router;
+export { router as templateRoutes };

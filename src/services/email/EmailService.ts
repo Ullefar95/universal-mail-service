@@ -4,7 +4,7 @@ import { TemplateService } from "../template/TemplateService";
 import { QueueService } from "../queue/QueueService";
 import { RateLimiter } from "../../utils/RateLimiter";
 import { Logger } from "../../utils/Logger";
-import { EmailOptions, EmailJobData } from "../../types/email";
+import { EmailOptions, EmailJobData } from "../../types/email"; // Removed unused EmailJob import
 import { EmailError } from "../../errors/AppError";
 
 interface EmailStatus {
@@ -55,16 +55,21 @@ export class EmailService {
 
   async sendEmail(options: EmailOptions): Promise<string> {
     try {
-      // Check rate limit
       await this.rateLimiter.checkLimit("email");
 
-      // Process template if provided
       let html: string | undefined;
+      let text: string | undefined;
+
+      // Process template if provided
       if (options.templateId) {
         html = await this.templateService.processTemplate(
           options.templateId,
           options.variables ?? {}
         );
+      } else if (options.body) {
+        // Use direct content if templateId is not specified
+        html = options.body.html;
+        text = options.body.text;
       }
 
       // Create job data
@@ -74,6 +79,7 @@ export class EmailService {
         bcc: options.bcc,
         subject: options.subject,
         html,
+        text,
         attachments: options.attachments,
       };
 
@@ -101,7 +107,17 @@ export class EmailService {
     try {
       await this.transporter.sendMail({
         from: process.env.EMAIL_FROM,
-        ...jobData,
+        to: jobData.to,
+        cc: jobData.cc,
+        bcc: jobData.bcc,
+        subject: jobData.subject,
+        html: jobData.html,
+        text: jobData.text,
+        attachments: jobData.attachments?.map((attachment) => ({
+          filename: attachment.filename,
+          content: attachment.content,
+          contentType: attachment.contentType,
+        })),
       });
 
       this.logger.info("Email sent successfully", {
