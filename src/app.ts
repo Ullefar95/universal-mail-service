@@ -1,7 +1,5 @@
 ﻿import dotenv from "dotenv";
 dotenv.config();
-console.log(process.env);
-
 import express from "express";
 import cors from "cors";
 import path from "path";
@@ -13,17 +11,18 @@ import { setupDatabase } from "./config/database";
 import { Logger } from "./utils/Logger";
 
 const app = express();
-const PORT = process.env.PORT;
+const PORT = process.env.PORT ?? 3000;
 const logger = new Logger();
 
 // Middleware
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: process.env.CORS_ORIGIN ?? "http://localhost:3000",
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
   })
 );
+
 app.use(express.json());
 
 // API Routes

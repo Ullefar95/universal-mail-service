@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { Template, ITemplate } from "../models/Templates";
-import { TemplateError, AppError } from "../errors/AppError"; // Ensure AppError is imported here
+import { TemplateError } from "../errors/AppError";
 import { Logger } from "../utils/Logger";
 
 export class TemplateController {
@@ -17,16 +17,11 @@ export class TemplateController {
     next: NextFunction
   ): Promise<void> => {
     try {
-      const templates = await Template.find({ isActive: true })
-        .select("-content") // Exclude content in list view
-        .sort({ updatedAt: -1 });
-
-      this.logger.info("Retrieved templates", { count: templates.length });
-
-      res.status(200).json({
-        status: "success",
-        data: { templates },
+      const templates = await Template.find({ isActive: true }).sort({
+        updatedAt: -1,
       });
+      this.logger.info("Retrieved templates", { count: templates.length });
+      res.status(200).json({ status: "success", data: { templates } });
     } catch (error) {
       next(error);
     }
@@ -47,11 +42,7 @@ export class TemplateController {
       }
 
       this.logger.info("Retrieved template", { templateId: id });
-
-      res.status(200).json({
-        status: "success",
-        data: { template },
-      });
+      res.status(200).json({ status: "success", data: { template } });
     } catch (error) {
       next(error);
     }
@@ -65,11 +56,10 @@ export class TemplateController {
   ): Promise<void> => {
     try {
       const templateData: Partial<ITemplate> = req.body;
-      console.log("Received template data:", templateData);
-
       const existingTemplate = await Template.findOne({
         name: templateData.name,
       });
+
       if (existingTemplate) {
         throw new TemplateError(
           "Template with this name already exists",
@@ -78,17 +68,9 @@ export class TemplateController {
       }
 
       const template = await Template.create(templateData);
-      console.log("Template created:", template);
-
       this.logger.info("Template created", { templateId: template._id });
-      res.status(201).json({
-        status: "success",
-        data: { template },
-      });
+      res.status(201).json({ status: "success", data: { template } });
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      console.error("Error creating template:", errorMessage);
       next(error);
     }
   };
@@ -103,7 +85,10 @@ export class TemplateController {
       const { id } = req.params;
       const updateData: Partial<ITemplate> = req.body;
 
-      // Check if template exists
+      // Log the incoming update data for debugging
+      console.log("Update data received:", updateData);
+
+      // Check if the template exists
       const template = await Template.findById(id);
       if (!template) {
         throw new TemplateError("Template not found", "NOT_FOUND");
@@ -117,23 +102,31 @@ export class TemplateController {
         updateData.version = template.version + 1;
       }
 
+      // Log the final update data before saving
+      console.log("Final update data:", updateData);
+
+      // Perform the update
       const updatedTemplate = await Template.findByIdAndUpdate(id, updateData, {
         new: true,
         runValidators: true,
       });
 
-      this.logger.info("Template updated", { templateId: id });
+      // Log the result from MongoDB after the update
+      console.log("Updated template:", updatedTemplate);
 
+      // Send the updated template in the response
+      this.logger.info("Template updated", { templateId: id });
       res.status(200).json({
         status: "success",
         data: { template: updatedTemplate },
       });
     } catch (error) {
+      console.error("Update failed:", error);
       next(error);
     }
   };
 
-  // Soft delete a template by setting isActive to false
+  // Delete a template from the database or use soft delete by setting `isActive` to false
   deleteTemplate = async (
     req: Request,
     res: Response,
@@ -142,22 +135,13 @@ export class TemplateController {
     try {
       const { id } = req.params;
 
-      const template = await Template.findByIdAndUpdate(
-        id,
-        { isActive: false },
-        { new: true }
-      );
-
+      const template = await Template.findByIdAndDelete(id); // Directly delete from the database
       if (!template) {
         throw new TemplateError("Template not found", "NOT_FOUND");
       }
 
       this.logger.info("Template deleted", { templateId: id });
-
-      res.status(200).json({
-        status: "success",
-        data: null,
-      });
+      res.status(200).json({ status: "success", data: null });
     } catch (error) {
       next(error);
     }

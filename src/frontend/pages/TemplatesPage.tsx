@@ -15,23 +15,33 @@ export const TemplatesPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [isEditing, setIsEditing] = useState(false); // New state for edit mode
 
-  // Update newTemplate to match the schema with "content" instead of "body"
-  const [newTemplate, setNewTemplate] = useState<{
-    name: string;
-    subject: string;
-    content: { html: string; text?: string };
-  }>({
+  // Define initial template structure
+  const [newTemplate, setNewTemplate] = useState<
+    Omit<EmailTemplate, "_id" | "createdAt" | "updatedAt">
+  >({
     name: "",
     subject: "",
     content: { html: "", text: "" },
   });
 
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
+    null
+  );
+
+  // Fetch templates on load
   const fetchTemplates = async () => {
     setLoading(true);
     try {
       const response = await templateApi.getAll();
-      setTemplates(Array.isArray(response.data) ? response.data : []);
+      const templates = Array.isArray(response.data.data.templates)
+        ? response.data.data.templates.map((template) => ({
+            ...template,
+            content: template.content || { html: "", text: "" },
+          }))
+        : [];
+      setTemplates(templates);
     } catch (error) {
       console.error("Failed to fetch templates:", error);
       setTemplates([]);
@@ -40,23 +50,52 @@ export const TemplatesPage: React.FC = () => {
     }
   };
 
-  const createTemplate = async () => {
+  // Save a new or updated template
+  const saveTemplate = async () => {
     try {
-      await templateApi.create(newTemplate);
-      fetchTemplates();
+      const sanitizedTemplate = {
+        ...newTemplate,
+        content: {
+          html: newTemplate.content.html,
+          text: newTemplate.content.text,
+        },
+      };
+
+      if (isEditing && selectedTemplateId) {
+        await templateApi.update(selectedTemplateId, sanitizedTemplate);
+      } else {
+        await templateApi.create(sanitizedTemplate);
+      }
+
+      fetchTemplates(); // Refresh list
       setShowCreateModal(false);
+      setIsEditing(false);
+      setSelectedTemplateId(null);
     } catch (error) {
-      console.error("Failed to create template:", error);
+      console.error("Failed to save template:", error);
     }
   };
 
+  // Delete a template
   const deleteTemplate = async (id: string) => {
     try {
       await templateApi.delete(id);
-      fetchTemplates();
+      fetchTemplates(); // Refresh list
     } catch (error) {
       console.error("Failed to delete template:", error);
     }
+  };
+
+  // Edit a template
+  const editTemplate = (template: EmailTemplate) => {
+    setNewTemplate({
+      name: template.name,
+      subject: template.subject,
+      content: template.content,
+    });
+    setSelectedTemplateId(template._id);
+    setIsEditing(true);
+    setShowCreateModal(true);
   };
 
   useEffect(() => {
@@ -70,11 +109,11 @@ export const TemplatesPage: React.FC = () => {
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Email Templates</h1>
         <Button variant="primary" onClick={() => setShowCreateModal(true)}>
-          Create Template
+          {isEditing ? "Edit Template" : "Create Template"}
         </Button>
       </div>
       {showCreateModal && (
-        <div>
+        <div className="modal">
           <input
             value={newTemplate.name}
             onChange={(e) =>
@@ -90,7 +129,7 @@ export const TemplatesPage: React.FC = () => {
             placeholder="Template Subject"
           />
           <textarea
-            value={newTemplate.content.html} // Updates the `content.html` field
+            value={newTemplate.content.html}
             onChange={(e) =>
               setNewTemplate({
                 ...newTemplate,
@@ -109,22 +148,37 @@ export const TemplatesPage: React.FC = () => {
             }
             placeholder="Text Content (optional)"
           />
-          <Button onClick={createTemplate}>Save</Button>
-          <Button onClick={() => setShowCreateModal(false)}>Cancel</Button>
+          <Button onClick={saveTemplate}>
+            {isEditing ? "Update" : "Save"}
+          </Button>
+          <Button
+            onClick={() => {
+              setShowCreateModal(false);
+              setIsEditing(false);
+              setSelectedTemplateId(null);
+            }}
+          >
+            Cancel
+          </Button>
         </div>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {templates.length > 0 ? (
           templates.map((template) => (
-            <Card key={template.id}>
+            <Card key={template._id}>
               <CardHeader>
                 <CardTitle>{template.name}</CardTitle>
+                <p className="text-xs text-gray-500">ID: {template._id}</p>{" "}
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-gray-500">{template.subject}</p>
-                <Button onClick={() => deleteTemplate(template.id)}>
+                <p className="text-sm text-gray-500">
+                  {template.content?.html || "No HTML content available"}
+                </p>
+                <Button onClick={() => deleteTemplate(template._id)}>
                   Delete
                 </Button>
+                <Button onClick={() => editTemplate(template)}>Edit</Button>
               </CardContent>
             </Card>
           ))

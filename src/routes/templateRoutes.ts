@@ -5,7 +5,15 @@ import { validateTemplateRequest } from "../middleware/validation";
 const router = Router();
 const templateController = new TemplateController();
 
-router.get("/", templateController.getTemplates);
+router.get(
+  "/",
+  (req, res, next) => {
+    console.log("GET /api/v1/templates hit"); // Debugging log
+    next();
+  },
+  templateController.getTemplates
+);
+
 router.get("/:id", templateController.getTemplate);
 router.post(
   "/",

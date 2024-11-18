@@ -1,5 +1,5 @@
 ﻿export interface EmailTemplate {
-  id: string;
+  _id: string; // MongoDB document ID
   name: string;
   subject: string;
   content: {
@@ -10,6 +10,12 @@
   createdAt: string;
   updatedAt: string;
 }
+
+// Type for creating new templates without _id, createdAt, or updatedAt
+export type NewEmailTemplate = Omit<
+  EmailTemplate,
+  "_id" | "createdAt" | "updatedAt"
+>;
 
 export interface EmailData {
   to: string[];
@@ -35,4 +41,10 @@ export interface EmailStatus {
   createdAt: string;
   sentAt?: string;
   error?: string;
+}
+export interface ApiKey {
+  id: string;
+  token: string;
+  name: string;
+  scopes: string[];
 }
