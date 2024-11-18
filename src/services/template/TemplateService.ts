@@ -1,6 +1,6 @@
 // src/services/template/TemplateService.ts
 import Handlebars from "handlebars";
-import { Template } from "../../models/Templates";
+import { Template } from "../../models/Templates"; // Ensure correct import path
 import { TemplateError } from "../../errors/AppError";
 import { Logger } from "../../utils/Logger";
 
@@ -13,6 +13,12 @@ export class TemplateService {
     this.logger = new Logger();
   }
 
+  /**
+   * Retrieves the HTML content of a template by its ID.
+   * @param templateId - ID of the template to retrieve.
+   * @returns The HTML content of the template.
+   * @throws TemplateError if template not found.
+   */
   async getTemplate(templateId: string): Promise<string> {
     try {
       const template = await Template.findOne({
@@ -24,13 +30,21 @@ export class TemplateService {
         throw new TemplateError("Template not found", "NOT_FOUND");
       }
 
-      return template.content;
+      // Return only the HTML part of the content
+      return template.content.html;
     } catch (error) {
       this.logger.error("Failed to get template", { error, templateId });
       throw error;
     }
   }
 
+  /**
+   * Processes the HTML template content with provided variables.
+   * @param templateId - ID of the template to process.
+   * @param variables - Variables to interpolate in the template.
+   * @returns The processed HTML content with variables interpolated.
+   * @throws TemplateError if processing fails.
+   */
   async processTemplate(
     templateId: string,
     variables: Record<string, any>
@@ -39,7 +53,7 @@ export class TemplateService {
       let template = this.templates.get(templateId);
 
       if (!template) {
-        const templateStr = await this.getTemplate(templateId);
+        const templateStr = await this.getTemplate(templateId); // Uses only HTML content
         template = Handlebars.compile(templateStr);
         this.templates.set(templateId, template);
       }
@@ -55,6 +69,12 @@ export class TemplateService {
     }
   }
 
+  /**
+   * Validates that all required variables for a template are provided.
+   * @param templateId - ID of the template to validate.
+   * @param variables - Variables to check against the template's required variables.
+   * @throws TemplateError if required variables are missing.
+   */
   async validateVariables(
     templateId: string,
     variables: Record<string, any>
@@ -67,7 +87,7 @@ export class TemplateService {
       }
 
       const missingVariables = template.variables.filter(
-        (variable: string) => !variables.hasOwnProperty(variable)
+        (variable: string) => !Object.hasOwn(variables, variable)
       );
 
       if (missingVariables.length > 0) {
@@ -87,6 +107,10 @@ export class TemplateService {
     }
   }
 
+  /**
+   * Clears the template cache, optionally by templateId.
+   * @param templateId - (Optional) ID of the specific template to clear from cache.
+   */
   clearCache(templateId?: string): void {
     if (templateId) {
       this.templates.delete(templateId);

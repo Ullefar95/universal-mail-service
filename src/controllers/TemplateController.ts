@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { Template, ITemplate } from "../models/Templates";
-import { TemplateError } from "../errors/AppError";
+import { TemplateError, AppError } from "../errors/AppError"; // Ensure AppError is imported here
 import { Logger } from "../utils/Logger";
 
 export class TemplateController {
@@ -20,6 +20,8 @@ export class TemplateController {
       const templates = await Template.find({ isActive: true })
         .select("-content") // Exclude content in list view
         .sort({ updatedAt: -1 });
+
+      this.logger.info("Retrieved templates", { count: templates.length });
 
       res.status(200).json({
         status: "success",
@@ -44,6 +46,8 @@ export class TemplateController {
         throw new TemplateError("Template not found", "NOT_FOUND");
       }
 
+      this.logger.info("Retrieved template", { templateId: id });
+
       res.status(200).json({
         status: "success",
         data: { template },
@@ -61,8 +65,8 @@ export class TemplateController {
   ): Promise<void> => {
     try {
       const templateData: Partial<ITemplate> = req.body;
+      console.log("Received template data:", templateData);
 
-      // Check for duplicate template by name
       const existingTemplate = await Template.findOne({
         name: templateData.name,
       });
@@ -74,14 +78,17 @@ export class TemplateController {
       }
 
       const template = await Template.create(templateData);
+      console.log("Template created:", template);
 
       this.logger.info("Template created", { templateId: template._id });
-
       res.status(201).json({
         status: "success",
         data: { template },
       });
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      console.error("Error creating template:", errorMessage);
       next(error);
     }
   };
@@ -103,7 +110,10 @@ export class TemplateController {
       }
 
       // Increment version if content is being updated
-      if (updateData.content && updateData.content !== template.content) {
+      if (
+        updateData.content &&
+        JSON.stringify(updateData.content) !== JSON.stringify(template.content)
+      ) {
         updateData.version = template.version + 1;
       }
 

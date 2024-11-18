@@ -1,11 +1,17 @@
 // src/models/Template.ts
 import mongoose, { Document, Schema, Model } from "mongoose";
 
+// Define Content interface for the structure of the `content` field
+export interface Content {
+  html: string;
+  text?: string;
+}
+
 export interface ITemplate extends Document {
   name: string;
   description?: string;
   subject: string;
-  content: string;
+  content: Content; // Updated to use Content interface
   version: number;
   isActive: boolean;
   variables: string[];
@@ -40,7 +46,10 @@ const templateSchema = new Schema<ITemplate, ITemplateModel>(
       trim: true,
     },
     content: {
-      type: String,
+      type: {
+        html: { type: String, required: true },
+        text: { type: String, required: false },
+      },
       required: true,
     },
     version: {
@@ -64,10 +73,10 @@ const templateSchema = new Schema<ITemplate, ITemplateModel>(
   }
 );
 
-// Pre-save hook for automatic variable extraction
+// Pre-save hook for automatic variable extraction from HTML content
 templateSchema.pre("save", function (next) {
   const variableRegex = /{{(.*?)}}/g;
-  const matches = this.content.match(variableRegex) || [];
+  const matches = this.content.html.match(variableRegex) || []; // Use `html` field in `content`
   this.variables = [
     ...new Set(matches.map((match) => match.replace(/{{|}}/g, "").trim())),
   ];
@@ -114,7 +123,7 @@ templateSchema.statics.findByNameAndVersion = function (
   return this.findOne(query).sort({ version: -1 });
 };
 
-// Add indexes before creating the model
+// Add indexes
 templateSchema.index({ name: 1, version: -1 });
 templateSchema.index({ isActive: 1 });
 

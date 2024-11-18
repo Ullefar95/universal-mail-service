@@ -30,7 +30,7 @@ const templateSchema = Joi.object({
   name: Joi.string().required(), // Required name for the template
   description: Joi.string().optional(), // Optional description
   subject: Joi.string().required(), // Required subject for the template
-  body: Joi.object({
+  content: Joi.object({
     html: Joi.string().required(), // HTML content for the email body
     text: Joi.string().optional(), // Optional plain text content
   }).required(),

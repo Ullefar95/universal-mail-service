@@ -13,18 +13,18 @@ import "../styles/globals.css";
 
 export const TemplatesPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
-  const [templates, setTemplates] = useState<EmailTemplate[]>([]); // Explicitly using EmailTemplate type
+  const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  // Setting initial state for newTemplate to match EmailTemplate type
+  // Update newTemplate to match the schema with "content" instead of "body"
   const [newTemplate, setNewTemplate] = useState<{
     name: string;
     subject: string;
-    body: { html: string; text?: string };
+    content: { html: string; text?: string };
   }>({
     name: "",
     subject: "",
-    body: { html: "", text: "" },
+    content: { html: "", text: "" },
   });
 
   const fetchTemplates = async () => {
@@ -42,7 +42,7 @@ export const TemplatesPage: React.FC = () => {
 
   const createTemplate = async () => {
     try {
-      await templateApi.create(newTemplate); // Passes newTemplate matching the EmailTemplate type
+      await templateApi.create(newTemplate);
       fetchTemplates();
       setShowCreateModal(false);
     } catch (error) {
@@ -90,21 +90,21 @@ export const TemplatesPage: React.FC = () => {
             placeholder="Template Subject"
           />
           <textarea
-            value={newTemplate.body.html} // Assigns `html` content to `body.html`
+            value={newTemplate.content.html} // Updates the `content.html` field
             onChange={(e) =>
               setNewTemplate({
                 ...newTemplate,
-                body: { ...newTemplate.body, html: e.target.value },
+                content: { ...newTemplate.content, html: e.target.value },
               })
             }
             placeholder="HTML Content"
           />
           <textarea
-            value={newTemplate.body.text ?? ""}
+            value={newTemplate.content.text ?? ""}
             onChange={(e) =>
               setNewTemplate({
                 ...newTemplate,
-                body: { ...newTemplate.body, text: e.target.value },
+                content: { ...newTemplate.content, text: e.target.value },
               })
             }
             placeholder="Text Content (optional)"

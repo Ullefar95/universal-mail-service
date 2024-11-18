@@ -2,7 +2,7 @@
   id: string;
   name: string;
   subject: string;
-  body: {
+  content: {
     html: string;
     text?: string;
   };
