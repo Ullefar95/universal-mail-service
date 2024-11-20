@@ -3,7 +3,7 @@ import { TemplateService } from "../template/TemplateService";
 import { QueueService } from "../queue/QueueService";
 import { RateLimiter } from "../../utils/RateLimiter";
 import { Logger } from "../../utils/Logger";
-import { EmailOptions, EmailJobData } from "../../types/email";
+import { EmailOptions, EmailJobData, EmailStatus } from "../../types/email";
 import { EmailError } from "../../errors/AppError";
 import { SmtpSettings } from "../../models/SmtpSettings";
 
@@ -21,6 +21,9 @@ export class EmailService {
         this.logger = new Logger();
     }
 
+    /**
+     * Initialize the transporter with SMTP settings.
+     */
     async init(): Promise<void> {
         try {
             const settings = await SmtpSettings.findOne();
@@ -51,11 +54,68 @@ export class EmailService {
         }
     }
 
+    /**
+     * Reload SMTP settings dynamically.
+     */
     async reloadSmtpSettings(): Promise<void> {
         await this.init();
         this.logger.info("SMTP settings reloaded dynamically.");
     }
 
+    /**
+     * Validate a template's variables.
+     */
+    async validateTemplate(
+        templateId: string,
+        variables?: Record<string, any>
+    ): Promise<void> {
+        try {
+            await this.templateService.validateVariables(
+                templateId,
+                variables ?? {}
+            );
+        } catch (error) {
+            this.logger.error("Template validation failed", error);
+            throw new EmailError(
+                "Template validation failed",
+                "TEMPLATE_VALIDATION_FAILED",
+                error
+            );
+        }
+    }
+
+    /**
+     * Fetch email job status.
+     */
+    async getEmailStatus(jobId: string): Promise<EmailStatus | null> {
+        try {
+            const job = await this.queueService.getJob(jobId);
+
+            if (!job) {
+                return null;
+            }
+
+            return {
+                jobId: job.id.toString(),
+                status: job.status,
+                completedAt: job.finishedOn
+                    ? new Date(job.finishedOn)
+                    : undefined,
+                error: job.failedReason,
+            };
+        } catch (error) {
+            this.logger.error("Failed to get email status", { jobId, error });
+            throw new EmailError(
+                "Failed to get email status",
+                "EMAIL_STATUS_FAILED",
+                error
+            );
+        }
+    }
+
+    /**
+     * Send an email.
+     */
     async sendEmail(options: EmailOptions): Promise<string> {
         if (!this.transporter) {
             throw new EmailError(
@@ -67,18 +127,14 @@ export class EmailService {
         try {
             await this.rateLimiter.checkLimit("email");
 
-            let html: string | undefined;
-            let text: string | undefined;
+            const html = options.templateId
+                ? await this.templateService.processTemplate(
+                      options.templateId,
+                      options.variables ?? {}
+                  )
+                : options.body?.html;
 
-            if (options.templateId) {
-                html = await this.templateService.processTemplate(
-                    options.templateId,
-                    options.variables ?? {}
-                );
-            } else if (options.body) {
-                html = options.body.html;
-                text = options.body.text;
-            }
+            const text = options.body?.text;
 
             const jobData: EmailJobData = {
                 to: options.to,
@@ -94,7 +150,9 @@ export class EmailService {
 
             this.logger.info("Email queued successfully", {
                 jobId,
-                to: options.to,
+                to: Array.isArray(options.to)
+                    ? options.to.join(", ")
+                    : options.to,
                 subject: options.subject,
                 templateId: options.templateId,
             });
@@ -114,6 +172,9 @@ export class EmailService {
         }
     }
 
+    /**
+     * Process a queued email job.
+     */
     async processEmailJob(jobId: string, jobData: EmailJobData): Promise<void> {
         if (!this.transporter) {
             throw new EmailError(
@@ -123,8 +184,10 @@ export class EmailService {
         }
 
         try {
-            const formatAddresses = (addresses?: string | string[]) =>
-                Array.isArray(addresses) ? addresses.join(",") : addresses;
+            const formatAddresses = (addresses?: string | string[]): string =>
+                Array.isArray(addresses)
+                    ? addresses.join(", ")
+                    : addresses ?? "";
 
             await this.transporter.sendMail({
                 from: jobData.from ?? (await this.getSenderAddress()),
@@ -160,6 +223,9 @@ export class EmailService {
         }
     }
 
+    /**
+     * Get the default sender address.
+     */
     private async getSenderAddress(): Promise<string> {
         const settings = await SmtpSettings.findOne();
         if (!settings || !settings.from) {
