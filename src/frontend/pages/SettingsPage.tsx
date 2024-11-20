@@ -1,77 +1,127 @@
-﻿import React, { useEffect, useState } from "react";
+﻿import React, { useState } from "react";
 import { Button } from "../components/common/Button";
-import { authApi } from "../api/api";
 
-interface ApiKey {
-  token: string;
-  name: string;
-  _id: string;
+interface SMTPSettings {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  pass: string;
+  from: string;
 }
 
 const SettingsPage: React.FC = () => {
-  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
-  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [smtpSettings, setSmtpSettings] = useState<SMTPSettings>({
+    host: "",
+    port: 587,
+    secure: false,
+    user: "",
+    pass: "",
+    from: "",
+  });
 
-  useEffect(() => {
-    const fetchApiKeys = async () => {
-      try {
-        const response = await authApi.getApiKeys();
-        const data = response.data as unknown;
-
-        // Check if data is an array of ApiKey objects
-        if (Array.isArray(data) && data.every(isApiKey)) {
-          setApiKeys(data);
-        } else {
-          console.error("Invalid API key data format:", data);
-        }
-      } catch (error) {
-        console.error("Failed to fetch API keys:", error);
-      }
-    };
-    fetchApiKeys();
-  }, []);
-
-  const isApiKey = (item: any): item is ApiKey =>
-    typeof item === "object" &&
-    "token" in item &&
-    "name" in item &&
-    "_id" in item;
-
-  const generateAuthToken = async () => {
-    try {
-      const response = await authApi.generateToken();
-      setAuthToken(response.data.token);
-      localStorage.setItem("token", response.data.token);
-      alert("Token generated successfully");
-    } catch (error) {
-      console.error("Failed to generate auth token:", error);
-    }
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
+    const { name, value, type } = e.target;
+    setSmtpSettings((prev) => ({
+      ...prev,
+      [name]: type === "number" ? parseInt(value, 10) : value,
+    }));
   };
 
-  const deleteApiKey = async (apiKeyId: string) => {
+  const handleSubmit = async () => {
     try {
-      await authApi.revokeApiKey(apiKeyId);
-      setApiKeys(apiKeys.filter((key) => key._id !== apiKeyId));
-      alert("API key deleted successfully");
+      const response = await fetch("/api/v1/settings/smtp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(smtpSettings),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to save SMTP settings");
+      }
+
+      alert("SMTP settings updated successfully");
     } catch (error) {
-      console.error("Failed to delete API key:", error);
+      console.error("Error updating SMTP settings:", error);
+      alert("Failed to update SMTP settings");
     }
   };
 
   return (
-    <div>
-      <h1>Settings</h1>
-      <Button onClick={generateAuthToken}>Generate Auth Token</Button>
-      {authToken && <p>Generated Token: {authToken}</p>}
-      <h2>API Keys</h2>
-      <ul>
-        {apiKeys.map((key) => (
-          <li key={key._id}>
-            <span>{key.name}</span>
-            <Button onClick={() => deleteApiKey(key._id)}>Delete</Button>
-          </li>
-        ))}
-      </ul>
+    <div className="settings-page">
+      <h1>SMTP Settings</h1>
+      <div>
+        <label htmlFor="host">SMTP Host:</label>
+        <input
+          type="text"
+          id="host"
+          name="host"
+          value={smtpSettings.host}
+          onChange={handleChange}
+        />
+      </div>
+      <div>
+        <label htmlFor="port">SMTP Port:</label>
+        <input
+          type="number"
+          id="port"
+          name="port"
+          value={smtpSettings.port}
+          onChange={handleChange}
+        />
+      </div>
+      <div>
+        <label htmlFor="secure">Secure Connection:</label>
+        <select
+          id="secure"
+          name="secure"
+          value={smtpSettings.secure ? "true" : "false"}
+          onChange={(e) =>
+            setSmtpSettings((prev) => ({
+              ...prev,
+              secure: e.target.value === "true",
+            }))
+          }
+        >
+          <option value="true">Yes</option>
+          <option value="false">No</option>
+        </select>
+      </div>
+      <div>
+        <label htmlFor="user">SMTP User:</label>
+        <input
+          type="text"
+          id="user"
+          name="user"
+          value={smtpSettings.user}
+          onChange={handleChange}
+        />
+      </div>
+      <div>
+        <label htmlFor="pass">SMTP Password:</label>
+        <input
+          type="password"
+          id="pass"
+          name="pass"
+          value={smtpSettings.pass}
+          onChange={handleChange}
+        />
+      </div>
+      <div>
+        <label htmlFor="from">From Address:</label>
+        <input
+          type="email"
+          id="from"
+          name="from"
+          value={smtpSettings.from}
+          onChange={handleChange}
+        />
+      </div>
+      <Button onClick={handleSubmit}>Save Settings</Button>
     </div>
   );
 };

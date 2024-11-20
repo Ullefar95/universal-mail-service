@@ -1,72 +1,66 @@
 ﻿import dotenv from "dotenv";
 dotenv.config();
-
 import express from "express";
 import cors from "cors";
 import path from "path";
 import { emailRoutes } from "./routes/emailRoutes";
 import { templateRoutes } from "./routes/templateRoutes";
 import authRoutes from "./routes/authRoutes";
+import { settingsRoutes } from "./routes/settingsRoutes";
 import { errorHandler } from "./middleware/errorHandler";
 import { setupDatabase } from "./config/database";
 import { Logger } from "./utils/Logger";
 import { setupSwagger } from "./config/swagger";
 
-// Initialize app and logger
 const app = express();
 const PORT = process.env.PORT ?? 3000;
 const logger = new Logger();
 
-// Middleware for CORS
+// Middleware
 app.use(
-  cors({
-    origin: process.env.CORS_ORIGIN ?? "http://localhost:3000", // Set allowed origin
-    methods: ["GET", "POST", "PUT", "DELETE"], // Allowed methods
-    credentials: true, // Allow credentials
-  })
+    cors({
+        origin: process.env.CORS_ORIGIN ?? "http://localhost:3000",
+        methods: ["GET", "POST", "PUT", "DELETE"],
+        credentials: true,
+    })
 );
 
-// Middleware to parse incoming requests with JSON payloads
 app.use(express.json());
 
-// Set up Swagger documentation
+// Setup Swagger documentation
 setupSwagger(app);
 
-// Register API routes
+// API Routes
 app.use("/api/v1/emails", emailRoutes);
 app.use("/api/v1/templates", templateRoutes);
+app.use("/api/v1/settings", settingsRoutes);
 app.use("/api/v1/auth", authRoutes);
 
-// Serve static files for production
+// Serve static files from the React build directory
 if (process.env.NODE_ENV === "production") {
-  const publicPath = path.join(__dirname, "../public");
-  app.use(express.static(publicPath));
-  app.get("*", (req, res) => {
-    if (!req.path.startsWith("/api")) {
-      res.sendFile(path.join(publicPath, "index.html"));
-    }
-  });
+    app.use(express.static(path.join(__dirname, "../public")));
+    app.get("*", (req, res) => {
+        if (!req.path.startsWith("/api")) {
+            res.sendFile(path.join(__dirname, "../public", "index.html"));
+        }
+    });
 }
 
-// Error handling middleware
+// Error handling
 app.use(errorHandler);
 
-// Function to start the server
+// Start server
 const startServer = async () => {
-  try {
-    // Setup database connection
-    await setupDatabase();
-
-    // Start listening on specified port
-    app.listen(PORT, () => {
-      logger.info(`🚀 Server is running at http://localhost:${PORT}`);
-    });
-  } catch (error) {
-    logger.error("❌ Failed to start server:", error);
-    process.exit(1); // Exit process on failure
-  }
+    try {
+        await setupDatabase();
+        app.listen(PORT, () => {
+            logger.info(`Server is running on http://localhost:${PORT}`);
+        });
+    } catch (error) {
+        logger.error("Failed to start server:", error);
+        process.exit(1);
+    }
 };
 
 startServer();
-
 export default app;
