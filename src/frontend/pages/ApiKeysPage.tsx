@@ -1,74 +1,99 @@
-﻿import React, { useEffect, useState } from "react";
-import { api } from "../api/api";
-import { Button } from "../components/common/Button";
-
-interface ApiKey {
-  key: string;
-  createdAt: string;
-  scopes: string[];
-}
+﻿import React from "react";
 
 const ApiKeysPage: React.FC = () => {
-  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const fetchApiKeys = async () => {
-    try {
-      const response = await api.get("/apikeys");
-      setApiKeys(response.data);
-    } catch (error) {
-      console.error("Failed to fetch API keys:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchApiKeys();
-  }, []);
-
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold">API Keys</h1>
-      <Button onClick={fetchApiKeys} variant="primary">
-        Refresh API Keys
-      </Button>
+    <div className="space-y-4 p-6">
+      <h1 className="text-2xl font-bold">API Documentation</h1>
+      <p className="text-gray-600">
+        Welcome to the Universal Mail Service API documentation. This guide
+        explains how to authenticate your requests, interact with various
+        endpoints, and understand request/response structures.
+      </p>
 
-      {loading ? (
-        <p>Loading...</p>
-      ) : (
-        <div className="space-y-2">
-          {apiKeys.length > 0 ? (
-            apiKeys.map((key) => (
-              <div key={key.key} className="p-2 bg-gray-100 rounded text-sm">
-                <p>
-                  <strong>Key:</strong> {key.key}
-                </p>
-                <p>
-                  <strong>Created At:</strong>{" "}
-                  {new Date(key.createdAt).toLocaleString()}
-                </p>
-                <p>
-                  <strong>Scopes:</strong> {key.scopes.join(", ")}
-                </p>
-              </div>
-            ))
-          ) : (
-            <p>No API keys available.</p>
-          )}
-        </div>
-      )}
-
+      {/* Authentication Section */}
       <div className="mt-6">
-        <h2 className="text-xl font-semibold">API Documentation</h2>
+        <h2 className="text-xl font-semibold">Authentication</h2>
         <p className="text-sm text-gray-600">
-          Use the API keys listed above to authenticate requests to the API.
-          Include the API key in the `x-api-key` header in your requests.
-          Detailed API documentation can be found{" "}
-          <a href="/api-docs" className="text-blue-500 hover:underline">
-            here
-          </a>
+          All API requests require authentication using an API key. Include the
+          API key in the request headers as shown below:
         </p>
+        <pre className="p-4 bg-gray-100 rounded text-sm text-gray-800">
+          {`GET /api/v1/resource
+Headers:
+  x-api-key: your-api-key`}
+        </pre>
+      </div>
+
+      {/* Endpoints Overview Section */}
+      <div className="mt-6">
+        <h2 className="text-xl font-semibold">Endpoints Overview</h2>
+        <ul className="list-disc list-inside text-sm text-gray-600">
+          <li>
+            <strong>GET /templates</strong>: Retrieve all active templates.
+          </li>
+          <li>
+            <strong>GET /templates/{`{id}`}</strong>: Retrieve a specific
+            template by ID.
+          </li>
+          <li>
+            <strong>POST /templates</strong>: Create a new template.
+          </li>
+          <li>
+            <strong>PUT /templates/{`{id}`}</strong>: Update an existing
+            template.
+          </li>
+          <li>
+            <strong>DELETE /templates/{`{id}`}</strong>: Delete a template.
+          </li>
+          <li>
+            <strong>POST /emails/send</strong>: Send a single email.
+          </li>
+          <li>
+            <strong>POST /emails/batch</strong>: Send a batch of emails.
+          </li>
+          <li>
+            <strong>GET /emails/status/{`{id}`}</strong>: Get the status of a
+            specific email.
+          </li>
+        </ul>
+      </div>
+
+      {/* Example Request Section */}
+      <div className="mt-6">
+        <h2 className="text-xl font-semibold">Example Request</h2>
+        <pre className="p-4 bg-gray-100 rounded text-sm text-gray-800">
+          {`POST /api/v1/templates
+Headers:
+  Content-Type: application/json
+  x-api-key: your-api-key
+Body:
+{
+  "name": "Welcome Email",
+  "subject": "Welcome to Our Service!",
+  "content": {
+    "html": "<h1>Hello</h1>",
+    "text": "Hello"
+  },
+  "isActive": true
+}`}
+        </pre>
+      </div>
+
+      {/* Explore More Section */}
+      <div className="mt-6">
+        <h2 className="text-xl font-semibold">Explore More</h2>
+        <p className="text-sm text-gray-600">
+          For detailed API specifications and to try out live requests, visit
+          the full OpenAPI documentation:
+        </p>
+        <a
+          href="/api-docs"
+          className="text-blue-500 hover:underline"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          OpenAPI Documentation
+        </a>
       </div>
     </div>
   );
