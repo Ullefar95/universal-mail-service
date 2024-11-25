@@ -34,7 +34,10 @@ export class EmailService {
      * Initialize the SMTP transporter with settings from the database.
      */
     async init(): Promise<void> {
-        if (this.initialized) return;
+        if (this.initialized) {
+            this.logger.info("SMTP transporter already initialized.");
+            return;
+        }
 
         try {
             const settings = await SmtpSettings.findOne();
@@ -53,8 +56,12 @@ export class EmailService {
                     user: settings.user,
                     pass: settings.pass,
                 },
-                logger: true, // Enable detailed logging
-                debug: true, // Enable debug output
+                pool: true,
+                maxConnections: 5,
+                maxMessages: 100,
+                connectionTimeout: 6000000, // Timeout for forbindelser
+                greetingTimeout: 3000000, // Timeout for EHLO/HELO hilsen
+                socketTimeout: 6000000, // Timeout for socket-aktivitet
             });
 
             this.logger.info("SMTP transporter initialized successfully.");
@@ -163,6 +170,13 @@ export class EmailService {
                 );
             }
 
+            this.logger.info("Attempting to send email", {
+                to: options.to,
+                subject: options.subject,
+                cc: options.cc,
+                bcc: options.bcc,
+            });
+
             const html = options.templateId
                 ? await this.templateService.processTemplate(
                       options.templateId,
@@ -192,6 +206,8 @@ export class EmailService {
         } catch (error) {
             this.logger.error("Failed to send email", {
                 error: error instanceof Error ? error.message : error,
+                to: options.to,
+                subject: options.subject,
             });
             throw new EmailError(
                 "Failed to send email",
@@ -211,6 +227,13 @@ export class EmailService {
                 "SMTP_NOT_INITIALIZED"
             );
         }
+
+        this.logger.info("Preparing to send email", {
+            jobId,
+            to: jobData.to,
+            subject: jobData.subject,
+            from: jobData.from,
+        });
 
         try {
             const formatAddresses = (addresses?: string | string[]): string =>
@@ -242,6 +265,8 @@ export class EmailService {
             this.logger.error("Failed to send email", {
                 jobId,
                 error: error instanceof Error ? error.message : error,
+                to: jobData.to,
+                subject: jobData.subject,
             });
 
             throw new EmailError(
