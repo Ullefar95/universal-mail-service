@@ -13,22 +13,36 @@ export class EmailService {
     private readonly queueService: QueueService;
     private readonly rateLimiter: RateLimiter;
     private readonly logger: Logger;
+    private static instance: EmailService;
+    private initialized: boolean = false;
 
-    constructor() {
+    private constructor() {
         this.templateService = new TemplateService();
         this.queueService = new QueueService();
         this.rateLimiter = new RateLimiter();
         this.logger = new Logger();
     }
 
+    public static getInstance(): EmailService {
+        if (!EmailService.instance) {
+            EmailService.instance = new EmailService();
+        }
+        return EmailService.instance;
+    }
+
     /**
-     * Initialize the transporter with SMTP settings.
+     * Initialize the SMTP transporter with settings from the database.
      */
     async init(): Promise<void> {
+        if (this.initialized) return;
+
         try {
             const settings = await SmtpSettings.findOne();
             if (!settings) {
-                throw new Error("SMTP settings not found in the database.");
+                throw new EmailError(
+                    "SMTP settings not found in the database.",
+                    "SMTP_SETTINGS_MISSING"
+                );
             }
 
             this.transporter = nodemailer.createTransport({
@@ -39,12 +53,15 @@ export class EmailService {
                     user: settings.user,
                     pass: settings.pass,
                 },
+                logger: true, // Enable detailed logging
+                debug: true, // Enable debug output
             });
 
             this.logger.info("SMTP transporter initialized successfully.");
+            this.initialized = true;
         } catch (error) {
             this.logger.error("Failed to initialize SMTP transporter", {
-                error,
+                error: error instanceof Error ? error.message : error,
             });
             throw new EmailError(
                 "Failed to initialize SMTP transporter",
@@ -55,15 +72,26 @@ export class EmailService {
     }
 
     /**
+     * Ensure the service is initialized.
+     */
+    private async ensureInitialized(): Promise<void> {
+        if (!this.initialized) {
+            await this.init();
+        }
+    }
+
+    /**
      * Reload SMTP settings dynamically.
      */
     async reloadSmtpSettings(): Promise<void> {
+        this.transporter = null;
+        this.initialized = false;
         await this.init();
         this.logger.info("SMTP settings reloaded dynamically.");
     }
 
     /**
-     * Validate a template's variables.
+     * Validate the email template with variables.
      */
     async validateTemplate(
         templateId: string,
@@ -85,12 +113,11 @@ export class EmailService {
     }
 
     /**
-     * Fetch email job status.
+     * Get the status of an email job.
      */
     async getEmailStatus(jobId: string): Promise<EmailStatus | null> {
         try {
             const job = await this.queueService.getJob(jobId);
-
             if (!job) {
                 return null;
             }
@@ -117,6 +144,8 @@ export class EmailService {
      * Send an email.
      */
     async sendEmail(options: EmailOptions): Promise<string> {
+        await this.ensureInitialized();
+
         if (!this.transporter) {
             throw new EmailError(
                 "SMTP transporter not initialized",
@@ -126,6 +155,13 @@ export class EmailService {
 
         try {
             await this.rateLimiter.checkLimit("email");
+
+            if (!options.to || !options.subject) {
+                throw new EmailError(
+                    "Missing required fields: to, subject",
+                    "VALIDATION_ERROR"
+                );
+            }
 
             const html = options.templateId
                 ? await this.templateService.processTemplate(
@@ -146,23 +182,16 @@ export class EmailService {
                 attachments: options.attachments,
             };
 
-            const jobId = await this.queueService.addJob("email", jobData);
+            this.logger.info("Sending email with jobData", { jobData });
 
-            this.logger.info("Email queued successfully", {
-                jobId,
-                to: Array.isArray(options.to)
-                    ? options.to.join(", ")
-                    : options.to,
-                subject: options.subject,
-                templateId: options.templateId,
-            });
+            await this.processEmailJob("direct", jobData);
 
-            return jobId;
+            this.logger.info("Email sent successfully");
+
+            return "direct";
         } catch (error) {
-            this.logger.error("Failed to queue email", {
-                error,
-                to: options.to,
-                subject: options.subject,
+            this.logger.error("Failed to send email", {
+                error: error instanceof Error ? error.message : error,
             });
             throw new EmailError(
                 "Failed to send email",
@@ -173,7 +202,7 @@ export class EmailService {
     }
 
     /**
-     * Process a queued email job.
+     * Process a queued email job or send a direct email.
      */
     async processEmailJob(jobId: string, jobData: EmailJobData): Promise<void> {
         if (!this.transporter) {
@@ -212,9 +241,9 @@ export class EmailService {
         } catch (error) {
             this.logger.error("Failed to send email", {
                 jobId,
-                error,
-                to: jobData.to,
+                error: error instanceof Error ? error.message : error,
             });
+
             throw new EmailError(
                 "Failed to process email job",
                 "EMAIL_JOB_FAILED",
@@ -224,7 +253,7 @@ export class EmailService {
     }
 
     /**
-     * Get the default sender address.
+     * Get the default sender address from SMTP settings.
      */
     private async getSenderAddress(): Promise<string> {
         const settings = await SmtpSettings.findOne();

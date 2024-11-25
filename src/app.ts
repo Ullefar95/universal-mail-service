@@ -12,6 +12,8 @@ import { setupDatabase } from "./config/database";
 import { Logger } from "./utils/Logger";
 import { setupSwagger } from "./config/swagger";
 
+import testRouter from "./routes/testRouter";
+
 const app = express();
 const PORT = process.env.PORT ?? 3000;
 const logger = new Logger();
@@ -20,7 +22,8 @@ const logger = new Logger();
 app.use(
     cors({
         origin: process.env.CORS_ORIGIN ?? "http://localhost:3000",
-        methods: ["GET", "POST", "PUT", "DELETE"],
+        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allowedHeaders: ["Content-Type", "Accept"],
         credentials: true,
     })
 );
@@ -35,6 +38,27 @@ app.use("/api/v1/emails", emailRoutes);
 app.use("/api/v1/templates", templateRoutes);
 app.use("/api/v1/settings", settingsRoutes);
 app.use("/api/v1/auth", authRoutes);
+
+app.use("/api/v1", testRouter);
+
+interface RouteLayer {
+    route?: {
+        path: string;
+        methods: Record<string, boolean>;
+    };
+}
+
+app._router.stack
+    .filter((layer: RouteLayer) => layer.route)
+    .forEach((layer: RouteLayer) => {
+        if (layer.route) {
+            console.log(
+                `Registered Route: ${Object.keys(layer.route.methods)
+                    .join(", ")
+                    .toUpperCase()} ${layer.route.path}`
+            );
+        }
+    });
 
 // Serve static files from the React build directory
 if (process.env.NODE_ENV === "production") {
