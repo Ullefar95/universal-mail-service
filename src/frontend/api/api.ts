@@ -164,14 +164,8 @@ export const authApi = {
 export const settingsApi = {
     getSmtpSettings: async () => {
         try {
-            return await api.get<{
-                host: string;
-                port: number;
-                secure: boolean;
-                user: string;
-                pass: string;
-                from: string;
-            }>("/settings/smtp");
+            const response = await api.get("/settings/smtp");
+            return response.data;
         } catch (error) {
             console.error("Failed to fetch SMTP settings:", error);
             throw error;
@@ -186,10 +180,13 @@ export const settingsApi = {
         from: string;
     }) => {
         try {
-            return await api.post("/settings/smtp", settings);
-        } catch (error) {
-            console.error("Failed to update SMTP settings:", error);
-            throw error;
+            const response = await api.post("/settings/smtp", settings);
+            return response.data;
+        } catch (error: any) {
+            if (error.response?.data?.message) {
+                throw new Error(error.response.data.message);
+            }
+            throw new Error("Failed to update SMTP settings");
         }
     },
 };

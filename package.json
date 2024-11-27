@@ -6,8 +6,8 @@
   "scripts": {
     "start": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev": "concurrently \"npm run dev:backend\" \"react-scripts start\"",
-    "dev:backend": "ts-node-dev --respawn src/app.ts",
-    "dev:frontend": "craco start",
+    "dev:backend": "ts-node-dev --respawn --transpile-only src/app.ts",
+    "dev:frontend": "PORT=3000 react-scripts start",
     "build": "craco build",
     "build:backend": "tsc",
     "test": "jest",
