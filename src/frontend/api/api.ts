@@ -1,4 +1,4 @@
-﻿import axios from "axios";
+﻿import axios, { AxiosError } from "axios";
 import { EmailTemplate, EmailData, EmailStatus, ApiKey } from "../types/api";
 
 // Define the base URL for the API
@@ -7,10 +7,10 @@ const API_BASE_URL =
 
 export const api = axios.create({
     baseURL: API_BASE_URL,
-    timeout: 10000,
     headers: {
         "Content-Type": "application/json",
     },
+    withCredentials: true,
 });
 
 // Add request interceptor for authorization
@@ -23,6 +23,42 @@ api.interceptors.request.use(
         return config;
     },
     (error) => Promise.reject(new Error(error.message || error))
+);
+
+// Add request interceptor for debugging
+api.interceptors.request.use(
+    (config) => {
+        console.log("API Request:", {
+            url: config.url,
+            method: config.method,
+            data: config.data,
+            headers: config.headers,
+        });
+        return config;
+    },
+    (error) => {
+        return Promise.reject(
+            error instanceof Error
+                ? error
+                : new Error(error.message || "Unknown error")
+        );
+    }
+);
+
+// Add response interceptor for debugging
+api.interceptors.response.use(
+    (response) => {
+        console.log("API Response:", response.data);
+        return response;
+    },
+    (error) => {
+        console.error("API Error:", error.response || error);
+        return Promise.reject(
+            error instanceof Error
+                ? error
+                : new Error(error.message || "Unknown error")
+        );
+    }
 );
 
 // Template API service
@@ -168,7 +204,11 @@ export const settingsApi = {
             return response.data;
         } catch (error) {
             console.error("Failed to fetch SMTP settings:", error);
-            throw error;
+            throw new Error(
+                error instanceof AxiosError
+                    ? error.response?.data?.message || error.message
+                    : "Failed to fetch SMTP settings"
+            );
         }
     },
     updateSmtpSettings: async (settings: {
@@ -182,11 +222,13 @@ export const settingsApi = {
         try {
             const response = await api.post("/settings/smtp", settings);
             return response.data;
-        } catch (error: any) {
-            if (error.response?.data?.message) {
-                throw new Error(error.response.data.message);
-            }
-            throw new Error("Failed to update SMTP settings");
+        } catch (error) {
+            console.error("Failed to update SMTP settings:", error);
+            throw new Error(
+                error instanceof AxiosError
+                    ? error.response?.data?.message || error.message
+                    : "Failed to update SMTP settings"
+            );
         }
     },
 };

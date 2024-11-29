@@ -9,13 +9,27 @@ const swaggerDefinition = {
         title: "Universal Mail Service API",
         version: "1.0.0",
         description: "API documentation for the Universal Mail Service.",
+        contact: {
+            name: "API Support",
+            email: "Ullemanden@hotmail.com",
+        },
     },
     servers: [
         {
-            url: "http://localhost:3000/api/v1", // Adjust to your API base URL
+            url:
+                process.env.REACT_APP_API_URL ?? "http://localhost:3000/api/v1",
+            description: "Development server",
         },
     ],
     components: {
+        securitySchemes: {
+            ApiKeyAuth: {
+                type: "apiKey",
+                in: "header",
+                name: "x-api-key",
+                description: "API key to authorize requests",
+            },
+        },
         schemas: {
             EmailRequest: {
                 type: "object",
@@ -100,12 +114,26 @@ const swaggerDefinition = {
             },
         },
     },
+    security: [
+        {
+            ApiKeyAuth: [],
+        },
+    ],
+    tags: [
+        {
+            name: "Templates",
+            description: "Template management",
+        },
+    ],
 };
 
 // Swagger options
-const options = {
+const options: swaggerJSDoc.Options = {
     swaggerDefinition,
-    apis: ["./src/routes/*.ts"],
+    apis: [
+        "./src/routes/*.ts",
+        "./src/routes/*.js", // Include compiled JS files as well
+    ],
 };
 
 // Initialize Swagger JSDoc
@@ -113,5 +141,32 @@ const swaggerSpec = swaggerJSDoc(options);
 
 // Function to setup Swagger
 export const setupSwagger = (app: Application) => {
-    app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+    // Swagger UI options for better UI experience
+    const swaggerUiOptions = {
+        explorer: true,
+        swaggerOptions: {
+            persistAuthorization: true,
+            displayRequestDuration: true,
+            docExpansion: "none",
+            filter: true,
+        },
+        customCss: ".swagger-ui .topbar { display: none }",
+        customSiteTitle: "Universal Mail Service API Documentation",
+    };
+
+    // Serve swagger documentation
+    app.use("/api-docs", swaggerUi.serve);
+    app.get("/api-docs", swaggerUi.setup(swaggerSpec, swaggerUiOptions));
+
+    // Serve swagger spec as JSON if needed
+    app.get("/swagger.json", (req, res) => {
+        res.setHeader("Content-Type", "application/json");
+        res.send(swaggerSpec);
+    });
+
+    // Log swagger URLs
+    console.log(
+        "Swagger Documentation URL:",
+        `${process.env.REACT_APP_API_URL?.replace("/api/v1", "")}/api-docs`
+    );
 };

@@ -5,13 +5,13 @@ import { AppRoutes } from "./routes";
 import "./styles/globals.css";
 
 const FrontendApp: React.FC = () => {
-  return (
-    <BrowserRouter>
-      <MainLayout>
-        <AppRoutes />
-      </MainLayout>
-    </BrowserRouter>
-  );
+    return (
+        <BrowserRouter>
+            <MainLayout>
+                <AppRoutes />
+            </MainLayout>
+        </BrowserRouter>
+    );
 };
 
 export default FrontendApp;

@@ -15,19 +15,23 @@ import { setupSwagger } from "./config/swagger";
 import testRouter from "./routes/testRouter";
 
 const app = express();
-const PORT = process.env.PORT ?? 3000;
+const PORT = process.env.BACKEND_PORT ?? 3000;
 const logger = new Logger();
 
 // Middleware
 app.use(
     cors({
-        origin: process.env.CORS_ORIGIN ?? "http://localhost:3000",
+        origin: process.env.CORS_ORIGIN ?? "http://localhost:3001",
         methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allowedHeaders: ["Content-Type", "Accept"],
+        allowedHeaders: [
+            "Content-Type",
+            "Accept",
+            "Authorization",
+            "x-api-key",
+        ],
         credentials: true,
     })
 );
-
 app.use(express.json());
 
 // Setup Swagger documentation

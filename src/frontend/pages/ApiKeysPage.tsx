@@ -1,6 +1,9 @@
 ﻿import React from "react";
 
 const ApiKeysPage: React.FC = () => {
+    // Construct the correct API docs URL
+    const apiDocsUrl = "http://localhost:3000/api-docs";
+
     return (
         <div className="space-y-4 p-6">
             <h1 className="text-2xl font-bold">API Documentation</h1>
@@ -85,17 +88,34 @@ Body:
             {/* Explore More Section */}
             <div className="mt-6">
                 <h2 className="text-xl font-semibold">Explore More</h2>
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-gray-600 mb-2">
                     For detailed API specifications and to try out live
-                    requests, visit the full OpenAPI documentation:
+                    requests, visit our interactive OpenAPI documentation:
                 </p>
                 <a
-                    href="/api-docs"
-                    className="text-blue-500 hover:underline"
+                    href={apiDocsUrl}
+                    className="text-blue-500 hover:underline inline-flex items-center"
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={(e) => {
+                        // Optional: Log when documentation is accessed
+                        console.log("Accessing API documentation");
+                    }}
                 >
-                    OpenAPI Documentation
+                    <span>OpenAPI Documentation</span>
+                    <svg
+                        className="ml-1 w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                    >
+                        <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                        />
+                    </svg>
                 </a>
             </div>
         </div>

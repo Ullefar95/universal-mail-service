@@ -1,4 +1,4 @@
-import nodemailer, { Transporter } from "nodemailer";
+import nodemailer, { Transporter, TransportOptions } from "nodemailer";
 import { TemplateService } from "../template/TemplateService";
 import { QueueService } from "../queue/QueueService";
 import { RateLimiter } from "../../utils/RateLimiter";
@@ -7,8 +7,31 @@ import { EmailOptions, EmailJobData, EmailStatus } from "../../types/email";
 import { EmailError } from "../../errors/AppError";
 import { SmtpSettings } from "../../models/SmtpSettings";
 
+interface SmtpConfig extends TransportOptions {
+    host: string;
+    port: number;
+    secure: boolean;
+    auth: {
+        user: string;
+        pass: string;
+    };
+    requireTLS: boolean;
+    tls: {
+        ciphers: string;
+        rejectUnauthorized: boolean;
+        minVersion: string;
+    };
+    debug?: boolean;
+    logger?: boolean;
+    connectionTimeout?: number;
+    greetingTimeout?: number;
+    socketTimeout?: number;
+    authMethod?: string;
+}
+
 export class EmailService {
     private transporter: Transporter | null = null;
+    private smtpConfig: SmtpConfig | null = null;
     private readonly templateService: TemplateService;
     private readonly queueService: QueueService;
     private readonly rateLimiter: RateLimiter;
@@ -34,11 +57,6 @@ export class EmailService {
      * Initialize the SMTP transporter with settings from the database.
      */
     async init(): Promise<void> {
-        if (this.initialized) {
-            this.logger.info("SMTP transporter already initialized.");
-            return;
-        }
-
         try {
             const settings = await SmtpSettings.findOne();
             if (!settings) {
@@ -48,25 +66,71 @@ export class EmailService {
                 );
             }
 
-            this.transporter = nodemailer.createTransport({
+            const config: SmtpConfig = {
                 host: settings.host,
                 port: settings.port,
-                secure: settings.secure,
+                secure: false,
                 auth: {
                     user: settings.user,
                     pass: settings.pass,
                 },
-                pool: true,
-                maxConnections: 5,
-                maxMessages: 100,
-                connectionTimeout: 6000000, // Timeout for forbindelser
-                greetingTimeout: 3000000, // Timeout for EHLO/HELO hilsen
-                socketTimeout: 6000000, // Timeout for socket-aktivitet
+                requireTLS: true,
+                tls: {
+                    ciphers: "SSLv3",
+                    rejectUnauthorized: true,
+                    minVersion: "TLSv1.2",
+                },
+                debug: true,
+                logger: true,
+                authMethod: "LOGIN",
+                connectionTimeout: 30000,
+                greetingTimeout: 30000,
+                socketTimeout: 30000,
+            };
+
+            this.logger.info("Initializing with config", {
+                host: config.host,
+                port: config.port,
+                secure: config.secure,
+                user: config.auth.user,
             });
 
-            this.logger.info("SMTP transporter initialized successfully.");
-            this.initialized = true;
+            if (this.transporter) {
+                this.logger.info("Closing existing transporter");
+                this.transporter.close();
+            }
+
+            this.transporter = nodemailer.createTransport(config);
+
+            try {
+                await this.transporter.verify();
+                this.logger.info("SMTP connection verified successfully");
+                this.initialized = true;
+            } catch (verifyError) {
+                this.logger.error("SMTP verification failed", {
+                    error:
+                        verifyError instanceof Error
+                            ? verifyError.message
+                            : verifyError,
+                    config: {
+                        host: config.host,
+                        port: config.port,
+                        secure: config.secure,
+                        user: config.auth.user,
+                    },
+                });
+                throw new EmailError(
+                    "SMTP verification failed",
+                    "SMTP_VERIFICATION_FAILED",
+                    verifyError
+                );
+            }
+
+            this.smtpConfig = config;
+            this.logger.info("SMTP transporter initialized successfully");
         } catch (error) {
+            this.initialized = false;
+            this.transporter = null;
             this.logger.error("Failed to initialize SMTP transporter", {
                 error: error instanceof Error ? error.message : error,
             });
@@ -79,11 +143,40 @@ export class EmailService {
     }
 
     /**
-     * Ensure the service is initialized.
+     * Ensure the service is initialized and the transporter is ready.
      */
     private async ensureInitialized(): Promise<void> {
-        if (!this.initialized) {
-            await this.init();
+        try {
+            if (!this.initialized || !this.transporter) {
+                this.logger.info("Initializing email service");
+                await this.init();
+                return;
+            }
+
+            try {
+                await this.transporter.verify();
+            } catch (verifyError) {
+                this.logger.warn(
+                    "Transporter verification failed, reinitializing",
+                    {
+                        error:
+                            verifyError instanceof Error
+                                ? verifyError.message
+                                : verifyError,
+                    }
+                );
+                this.initialized = false;
+                await this.init();
+            }
+        } catch (error) {
+            this.logger.error("Failed to ensure initialization", {
+                error: error instanceof Error ? error.message : error,
+            });
+            throw new EmailError(
+                "Failed to ensure email service initialization",
+                "INITIALIZATION_FAILED",
+                error
+            );
         }
     }
 
@@ -177,40 +270,30 @@ export class EmailService {
                 bcc: options.bcc,
             });
 
-            const html = options.templateId
-                ? await this.templateService.processTemplate(
-                      options.templateId,
-                      options.variables ?? {}
-                  )
-                : options.body?.html;
-
-            const text = options.body?.text;
-
             const jobData: EmailJobData = {
                 to: options.to,
                 cc: options.cc,
                 bcc: options.bcc,
                 subject: options.subject,
-                html,
-                text,
+                html: options.body?.html,
+                text: options.body?.text,
                 attachments: options.attachments,
             };
 
             this.logger.info("Sending email with jobData", { jobData });
 
             await this.processEmailJob("direct", jobData);
-
-            this.logger.info("Email sent successfully");
-
             return "direct";
         } catch (error) {
             this.logger.error("Failed to send email", {
-                error: error instanceof Error ? error.message : error,
+                error: error instanceof Error ? error.stack : error,
                 to: options.to,
                 subject: options.subject,
             });
             throw new EmailError(
-                "Failed to send email",
+                `Failed to send email: ${
+                    error instanceof Error ? error.message : "Unknown error"
+                }`,
                 "EMAIL_SEND_FAILED",
                 error
             );
@@ -221,6 +304,8 @@ export class EmailService {
      * Process a queued email job or send a direct email.
      */
     async processEmailJob(jobId: string, jobData: EmailJobData): Promise<void> {
+        await this.ensureInitialized();
+
         if (!this.transporter) {
             throw new EmailError(
                 "SMTP transporter not initialized",
@@ -232,7 +317,6 @@ export class EmailService {
             jobId,
             to: jobData.to,
             subject: jobData.subject,
-            from: jobData.from,
         });
 
         try {
@@ -241,8 +325,14 @@ export class EmailService {
                     ? addresses.join(", ")
                     : addresses ?? "";
 
-            await this.transporter.sendMail({
-                from: jobData.from ?? (await this.getSenderAddress()),
+            const from = jobData.from ?? (await this.getSenderAddress());
+
+            const formattedFrom = from.includes("<")
+                ? from
+                : `"Universal Mail Service" <${from}>`;
+
+            const mailOptions = {
+                from: formattedFrom,
                 to: formatAddresses(jobData.to),
                 cc: formatAddresses(jobData.cc),
                 bcc: formatAddresses(jobData.bcc),
@@ -254,23 +344,46 @@ export class EmailService {
                     content: attachment.content,
                     contentType: attachment.contentType,
                 })),
+                headers: {
+                    "X-Priority": "3",
+                    "X-MSMail-Priority": "Normal",
+                    Importance: "Normal",
+                    "X-Mailer": "Universal Mail Service",
+                },
+            };
+
+            this.logger.info("Sending email with options", {
+                ...mailOptions,
+                html: mailOptions.html
+                    ? "HTML content present"
+                    : "No HTML content",
+                text: mailOptions.text
+                    ? "Text content present"
+                    : "No text content",
             });
+
+            const result = await this.transporter.sendMail(mailOptions);
 
             this.logger.info("Email sent successfully", {
                 jobId,
-                to: jobData.to,
-                subject: jobData.subject,
+                messageId: result.messageId,
+                response: result.response,
             });
         } catch (error) {
             this.logger.error("Failed to send email", {
                 jobId,
-                error: error instanceof Error ? error.message : error,
-                to: jobData.to,
-                subject: jobData.subject,
+                error: error instanceof Error ? error.stack : error,
+                config: {
+                    host: this.smtpConfig?.host,
+                    port: this.smtpConfig?.port,
+                    secure: this.smtpConfig?.secure,
+                },
             });
 
             throw new EmailError(
-                "Failed to process email job",
+                `Failed to process email job: ${
+                    error instanceof Error ? error.message : "Unknown error"
+                }`,
                 "EMAIL_JOB_FAILED",
                 error
             );
