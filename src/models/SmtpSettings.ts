@@ -7,6 +7,7 @@ interface ISmtpSettings extends Document {
     user: string;
     pass: string;
     from: string;
+    service?: string;
 }
 
 const SmtpSettingsSchema: Schema = new Schema({
@@ -16,6 +17,7 @@ const SmtpSettingsSchema: Schema = new Schema({
     user: { type: String, required: true },
     pass: { type: String, required: true },
     from: { type: String, required: true },
+    service: { type: String, required: false },
 });
 
 export const SmtpSettings = mongoose.model<ISmtpSettings>(

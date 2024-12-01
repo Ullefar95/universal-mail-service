@@ -9,8 +9,14 @@ if (!container) {
 }
 
 const root = createRoot(container);
-root.render(
-    <React.StrictMode>
-        <FrontendApp />
-    </React.StrictMode>
-);
+
+// Add error boundary
+try {
+    root.render(
+        <React.StrictMode>
+            <FrontendApp />
+        </React.StrictMode>
+    );
+} catch (error) {
+    console.error("Failed to render app:", error);
+}

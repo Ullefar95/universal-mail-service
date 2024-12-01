@@ -2,41 +2,38 @@
  * Interface for options when sending an email.
  */
 export interface EmailOptions {
-    to: string | string[]; // Accept a single email or an array
-    cc?: string | string[]; // Optional: single email or array
-    bcc?: string | string[]; // Optional: single email or array
-    subject: string; // Email subject
-    templateId?: string; // Template ID for dynamic content
-    variables?: Record<string, any>; // Variables for template rendering
+    to: string | string[];
+    cc?: string | string[];
+    bcc?: string | string[];
+    from?: string;
+    subject: string;
     body?: {
-        html?: string; // Optional: HTML content
-        text?: string; // Optional: Plain text content
+        html?: string;
+        text?: string;
     };
     attachments?: Array<{
-        filename: string; // Name of the file attachment
-        content: Buffer | string; // File content as Buffer or string
-        contentType: string; // MIME type of the attachment
+        filename: string;
+        content: Buffer | string;
+        contentType: string;
     }>;
+    templateId?: string;
+    variables?: Record<string, any>;
 }
 
-/**
- * Interface for email job data used in queueing or job processing.
- */
 export interface EmailJobData {
-    to: string | string[]; // Single recipient or multiple recipients
-    cc?: string | string[]; // Optional: Single or multiple CCs
-    bcc?: string | string[]; // Optional: Single or multiple BCCs
-    subject: string; // Email subject
-    html?: string; // Optional: HTML content
-    text?: string; // Optional: Plain text content
+    to: string | string[];
+    cc?: string | string[];
+    bcc?: string | string[];
+    from?: string;
+    subject: string;
+    html?: string;
+    text?: string;
     attachments?: Array<{
-        filename: string; // Name of the file attachment
-        content: Buffer | string; // File content as Buffer or string
-        contentType: string; // MIME type of the attachment
+        filename: string;
+        content: Buffer | string;
+        contentType: string;
     }>;
-    from?: string; // Optional: Sender's email address
 }
-
 /**
  * Interface for an email job, including job ID for tracking.
  */

@@ -21,19 +21,15 @@ const logger = new Logger();
 // Middleware
 app.use(
     cors({
-        origin: process.env.CORS_ORIGIN ?? "http://localhost:3001",
+        origin: ["http://localhost:3001"],
         methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        allowedHeaders: [
-            "Content-Type",
-            "Accept",
-            "Authorization",
-            "x-api-key",
-        ],
+        allowedHeaders: ["Content-Type", "Authorization", "x-api-key"],
         credentials: true,
     })
 );
-app.use(express.json());
 
+app.use(express.json());
+app.use(express.static(path.join(__dirname, "../public")));
 // Setup Swagger documentation
 setupSwagger(app);
 
@@ -66,7 +62,6 @@ app._router.stack
 
 // Serve static files from the React build directory
 if (process.env.NODE_ENV === "production") {
-    app.use(express.static(path.join(__dirname, "../public")));
     app.get("*", (req, res) => {
         if (!req.path.startsWith("/api")) {
             res.sendFile(path.join(__dirname, "../public", "index.html"));
