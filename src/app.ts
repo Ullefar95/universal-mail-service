@@ -12,8 +12,6 @@ import { setupDatabase } from "./config/database";
 import { Logger } from "./utils/Logger";
 import { setupSwagger } from "./config/swagger";
 
-import testRouter from "./routes/testRouter";
-
 const app = express();
 const PORT = process.env.BACKEND_PORT ?? 3000;
 const logger = new Logger();
@@ -38,8 +36,6 @@ app.use("/api/v1/emails", emailRoutes);
 app.use("/api/v1/templates", templateRoutes);
 app.use("/api/v1/settings", settingsRoutes);
 app.use("/api/v1/auth", authRoutes);
-
-app.use("/api/v1", testRouter);
 
 interface RouteLayer {
     route?: {
